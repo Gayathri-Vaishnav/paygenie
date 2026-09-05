@@ -61,35 +61,53 @@ function parseWithRegex(command) {
   if (amountWithSymbol) {
     amount = parseFloat(amountWithSymbol[1].replace(/,/g, ""));
   } else {
-    // Check for raw number after keywords like "bill Rohit 1500" or "collect 350"
+    // Check for raw number after keywords like "bill Rohit 1500" or "pay 450"
     const rawNumberMatch =
-      text.match(/(?:bill|charge|collect|invoice|pay)\s+[A-Za-z]+\s+([\d,]+(?:\.\d{1,2})?)\b/i) ||
-      text.match(/(?:for|amount|of)\s+([\d,]+(?:\.\d{1,2})?)\b/i) ||
+      text.match(/(?:bill|charge|collect|invoice|pay|apy)\s+[A-Za-z]+\s+([\d,]+(?:\.\d{1,2})?)\b/i) ||
+      text.match(/(?:pay|apy|for|amount|of|remind)\s+([\d,]+(?:\.\d{1,2})?)\b/i) ||
       text.match(/\b([\d,]+(?:\.\d{1,2})?)\s+link\b/i);
     if (rawNumberMatch) {
       amount = parseFloat(rawNumberMatch[1].replace(/,/g, ""));
+    } else {
+      // Fallback: any standalone positive number in the command
+      const allNumbers = text.match(/\b\d+(?:\.\d{1,2})?\b/g);
+      if (allNumbers) {
+        const candidates = allNumbers.map(Number).filter(n => n > 0 && n < 10000000 && n !== 2025 && n !== 2026);
+        if (candidates.length > 0) {
+          amount = candidates[0];
+        }
+      }
     }
   }
 
   // 2. Customer Name Extraction
   let customerName = "Customer";
 
-  // Case A: "send a request to pay 320 rs to the milk shop down the road"
+  // Patterns for conversational instructions:
+  // "remind ty to pay 450" -> Ty
+  const remindToPayMatch = text.match(/remind\s+([A-Za-z0-9]+)\s+to\s+(?:pay|apy|send|clear)/i);
+  // "ask rahul to pay 500" -> Rahul
+  const askToPayMatch = text.match(/ask\s+([A-Za-z0-9]+)\s+to\s+(?:pay|apy|send)/i);
+  // "ty to apy 450" or "ty to pay 450" -> Ty
+  const nameToPayMatch = text.match(/^([A-Za-z0-9]+)\s+to\s+(?:pay|apy|send)/i);
+  // "send a request to pay 320 rs to the milk shop down the road"
   const sendToMerchantMatch = text.match(/to\s+(?:the\s+)?([A-Za-z0-9\s]+?)(?:\s+down\s+the\s+road|\s+shop|\s+store)?(?:,|\.|$| remind)/i);
-
-  // Case B: "send [Name] a ₹X link..." or "send [Name] ₹X"
+  // "send [Name] a ₹X link..." or "send [Name] ₹X"
   const sendToNameMatch = text.match(/send\s+([A-Za-z]+)\s+(?:a|an|\d|₹|rs|inr)/i);
-
-  // Case C: "collect ₹X from [Name]..." or "from [Name]"
+  // "collect ₹X from [Name]..." or "from [Name]"
   const fromNameMatch = text.match(/from\s+([A-Za-z]+)\b/i);
-
-  // Case D: "bill [Name]..." or "charge [Name]..."
+  // "bill [Name]..." or "charge [Name]..."
   const billNameMatch = text.match(/(?:bill|charge|invoice)\s+([A-Za-z]+)\b/i);
-
-  // Case E: "create a ₹X link for [Name] for [Purpose]"
+  // "create a ₹X link for [Name] for [Purpose]"
   const forNameMatch = text.match(/link\s+for\s+([A-Za-z]+)\s+for\b/i) || text.match(/link\s+for\s+([A-Za-z]+)\b/i);
 
-  if (sendToNameMatch && !INVALID_CUSTOMER_NAMES.has(sendToNameMatch[1].toLowerCase())) {
+  if (remindToPayMatch && !INVALID_CUSTOMER_NAMES.has(remindToPayMatch[1].toLowerCase())) {
+    customerName = remindToPayMatch[1];
+  } else if (askToPayMatch && !INVALID_CUSTOMER_NAMES.has(askToPayMatch[1].toLowerCase())) {
+    customerName = askToPayMatch[1];
+  } else if (nameToPayMatch && !INVALID_CUSTOMER_NAMES.has(nameToPayMatch[1].toLowerCase())) {
+    customerName = nameToPayMatch[1];
+  } else if (sendToNameMatch && !INVALID_CUSTOMER_NAMES.has(sendToNameMatch[1].toLowerCase())) {
     customerName = sendToNameMatch[1];
   } else if (fromNameMatch && !INVALID_CUSTOMER_NAMES.has(fromNameMatch[1].toLowerCase())) {
     customerName = fromNameMatch[1];
